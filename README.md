@@ -135,6 +135,29 @@ When you change `api/wrangler.jsonc`, refresh the `Env` types:
 pnpm --filter bill-splitter-api cf-typegen
 ```
 
+## Decisions
+
+1. **The database arbitrates payments.** The payment route updates a share only
+   while `paid_at` is `NULL`, then uses the number of changed rows to determine
+   whether this request paid it. The stored idempotency key makes a retry with
+   the same key return the existing result, while a different key gets `409`.
+2. **Money and ordering use exact values.** Amounts stay as integer cents, and
+   the members table's auto-incrementing `seq` preserves insertion order.
+   Splitting gives everyone the floor of the division and distributes the
+   remainder one cent at a time to the first members.
+3. **Bills and shares are written as one batch.** The bill insert and all share
+   inserts use one D1 batch, so a failed share insert cannot leave a bill
+   without its complete set of shares.
+
+The web page also needs `GET /api/homes/:homeId/bills`, so that endpoint
+returns the bills with their nested shares. The database constraints in
+`api/migrations/0001_init.sql` protect relationships, uniqueness, valid
+names, positive bill totals, and non-negative shares.
+
+**AI use:** I used the Copilot SDK in VS Code to help implement and explain
+the code. I reviewed the changes, ran the checks, and added concurrency tests
+to verify the payment behavior.
+
 ## Rules for the tests
 
 - The visible tests are in `api/test`. They start with a failing result. Your job is to make them pass.
